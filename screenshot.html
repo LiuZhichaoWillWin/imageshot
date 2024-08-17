@@ -6,120 +6,138 @@
   <title>Document</title>
 </head>
 <style>
-.wrapper {
+#wrapper {
   display: flex;
-  flex-direction: row;
-  justify-content: flex-start;
-  .dragBox {
-    border: 1px solid red;
+  flex-direction: column;
+  .sourceBox {
+    position: relative;
+    display: flex;
     justify-content: center;
     align-items: center;
+    height: 550px;
+    .showImageBox {
+      position: absolute;
+      border: 1px solid red;
+    }
+    .dragBox {
+      position: absolute;
+      border: 1px solid green;
+    }
   }
-}
-.container {
-  width: 100%;
-  .screenshotBox {
-    display: block;
-    border: 1px solid blue;
-    margin: 30px auto;
+  .targetBox {
+    margin-top: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    .showClipAreaBox {
+      border: 1px solid yellowgreen;
+    }
   }
 }
 </style>
 <body>
-  <div class="wrapper">
-    <label for="readFile"><input type="file" id="readFile" accept="image/*"></label>
-    <span>拖放图片放置到这个区域</span>
+<div id="wrapper">
+  <label for="fileOption"><input type="file" id="fileOption"></label>
+  <div class="sourceBox">
+    <canvas class="showImageBox"></canvas>
     <canvas class="dragBox"></canvas>
   </div>
-  <div class="container"><canvas class="screenshotBox"></canvas></div>
+  <div class="targetBox">
+    <canvas class="showClipAreaBox"></canvas>
+  </div>
+</div>
+<script>
+;(() => {
+  const sourceBox = document.querySelector('.sourceBox');
+  const showImageBox = document.querySelector('.showImageBox');
+  const dragBox = document.querySelector('.dragBox');
+  const showClipArea = document.querySelector('.showClipAreaBox');
 
-  <script>
-    const readFile = document.querySelector('#readFile');
-    const dragBox = document.querySelector('.dragBox');
-    const screenshotBox = document.querySelector('.screenshotBox');
-    const img = new Image();
+  dragBox.addEventListener('dragover', function (e) {
+    e.stopPropagation();
+    e.preventDefault();
+  });
+  dragBox.addEventListener('drop', handleDrop);
+  function handleDrop(e) {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    const readFile = new FileReader();
+    readFile.readAsDataURL(file);
+    readFile.addEventListener('load', handleLoad);
+    function handleLoad(e) {
+      const img = new Image();
+      img.src = this.result;
+      img.addEventListener('load', handleInnerLoad);
+      function handleInnerLoad(e) {
+        const naturalWid = this.width;
+        const naturalHei = this.height;
+        sourceBox.width = naturalWid;
+        sourceBox.height = naturalHei;
+        showImageBox.width = naturalWid;
+        showImageBox.height = naturalHei;
+        dragBox.width = naturalWid;
+        dragBox.height = naturalHei;
 
-    dragBox.addEventListener('dragover', function (e) {
-      e.stopPropagation();
-      e.preventDefault();
-    });
+        const showImageCtx = showImageBox.getContext('2d');
+        showImageCtx.drawImage(this, 0, 0, showImageBox.width, showImageBox.height);
 
-    dragBox.addEventListener('drop', handleFile);
-    function handleFile(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      const file = e.dataTransfer.files[0];
-      if (!file.type.startsWith('image')) return;
-      const fileReader = new FileReader();
-      fileReader.readAsDataURL(file);
-      fileReader.addEventListener('load', () => {
-        img.src = fileReader.result;
-        img.addEventListener('load', () => {
-          dragBox.width = img.width;
-          dragBox.height = img.height;
-          console.log(img.width, img.height);
-          const ctx = dragBox.getContext('2d');
-          ctx.drawImage(img, 0, 0, dragBox.width, dragBox.height);
-        });
-      });
-    }
-
-    dragBox.addEventListener('mousedown', handleMousedown);
-    dragBox.addEventListener('mousemove', handleMousemove);
-    dragBox.addEventListener('mouseup', handleMouseup);
-    dragBox.addEventListener('mouseleave', handleMouseleave);
-    let startX, startY, sX, sY, screenshotWid, screenshotHei;
-    let startCutout = false;
-    function handleMousedown(e) {
-      startX = e.offsetX;
-      startY = e.offsetY;
-      console.log(startX, startY);
-      startCutout = true;
-    }
-
-    function handleMousemove(e) {
-      if (startCutout) {
-        const endX = e.offsetX;
-        const endY = e.offsetY;
-        sX = Math.min(endX, startX);
-        sY = Math.min(endY, startY);
-        screenshotWid = Math.abs(startX - endX);
-        screenshotHei = Math.abs(startY - endY);
-        const ctx = dragBox.getContext('2d');
-        requestAnimationFrame(() => {
-          ctx.clearRect(0, 0, ctx.width, ctx.height);
-          ctx.strokeStyle = 'red';
-          ctx.lineWidth = 1;
-          ctx.drawImage(img, 0, 0);
-          ctx.strokeRect(sX, sY, screenshotWid, screenshotHei);
-        });
+        // 设置蒙层
+        setLayer(dragBox);
       }
     }
 
+    let startShot = false;
+    let startX, startY, targetX, targetY, targetWid, targetHei;
+    dragBox.addEventListener('mousedown', handleMousedown);
+    dragBox.addEventListener('mousemove', handleMousemove);
+    dragBox.addEventListener('mouseup', handleMouseup);
+    function handleMousedown(e) {
+      startX = e.offsetX;
+      startY = e.offsetY;
+      console.log('down', startShot);
+      startShot = true;
+    }
+    function handleMousemove(e) {
+      console.log(startShot);
+      if (!startShot) return;
+      const moveX = e.offsetX;
+      const moveY = e.offsetY;
+      targetX = Math.min(moveX, startX);
+      targetY = Math.min(moveY, startY);
+      targetWid = Math.abs(moveX - startX);
+      targetHei = Math.abs(moveY - startY);
+      const ctx = dragBox.getContext('2d');
+      ctx.clearRect(0, 0, dragBox.width, dragBox.height);
+      setLayer(dragBox);
+      ctx.strokeStyle = 'red';
+      ctx.strokeRect(targetX - ctx.lineWidth, targetY - ctx.lineWidth, targetWid + 2*ctx.lineWidth, targetHei + 2*ctx.lineWidth);
+      ctx.save();
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillRect(targetX, targetY, targetWid, targetHei);
+      ctx.restore();
+    }
     function handleMouseup(e) {
-      startCutout = false;
-      screenshot();
-    }
-
-    function handleMouseleave(e) {
+      console.log('up', startShot);
+      startShot = false;
+      drawShot(dragBox, showClipArea);
       const ctx = dragBox.getContext('2d');
-      ctx.clearRect(0, 0, ctx.width, ctx.height);
-      ctx.drawImage(img, 0, 0);
-      startCutout = false;
+      ctx.clearRect(0, 0, dragBox.width, dragBox.height);
     }
-
-    function screenshot() {
+    function setLayer(dragBox) {
       const ctx = dragBox.getContext('2d');
-      ctx.clearRect(0, 0, ctx.width, ctx.height);
-      ctx.drawImage(img, 0, 0);
-
-      const screenshotBox = document.querySelector('.screenshotBox');
-      screenshotBox.width = screenshotWid;
-      screenshotBox.height = screenshotHei;
-      const sCtx = screenshotBox.getContext('2d');
-      sCtx.drawImage(dragBox, sX, sY, screenshotWid, screenshotHei, 0, 0, screenshotWid, screenshotHei);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+      ctx.fillRect(0, 0, dragBox.width, dragBox.height);
     }
 
-  </script>
+    function drawShot(dragBox, showClipArea) {
+      showClipArea.width = targetWid;
+      showClipArea.height = targetHei;
+      const ctx = showClipArea.getContext('2d');
+      ctx.drawImage(showImageBox, targetX, targetY, targetWid, targetHei, 0, 0, showClipArea.width, showClipArea.height);
+    }
+  }
+  
+})();
+</script>
 </body>
 </html>
