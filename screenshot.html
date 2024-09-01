@@ -19,7 +19,7 @@
       position: absolute;
       border: 1px solid red;
     }
-    .dragBox {
+    .dropBox {
       position: absolute;
       border: 1px solid green;
     }
@@ -38,9 +38,10 @@
 <body>
 <div id="wrapper">
   <label for="fileOption"><input type="file" id="fileOption"></label>
+  <div>囧撒娇</div>
   <div class="sourceBox">
     <canvas class="showImageBox"></canvas>
-    <canvas class="dragBox"></canvas>
+    <canvas class="dropBox"></canvas>
   </div>
   <div class="targetBox">
     <canvas class="showClipAreaBox"></canvas>
@@ -50,17 +51,21 @@
 ;(() => {
   const sourceBox = document.querySelector('.sourceBox');
   const showImageBox = document.querySelector('.showImageBox');
-  const dragBox = document.querySelector('.dragBox');
+  const dropBox = document.querySelector('.dropBox');
   const showClipArea = document.querySelector('.showClipAreaBox');
 
-  dragBox.addEventListener('dragover', function (e) {
-    e.stopPropagation();
+  dropBox.addEventListener('dragover', function (e) {
     e.preventDefault();
   });
-  dragBox.addEventListener('drop', handleDrop);
-  function handleDrop(e) {
+  dropBox.addEventListener('drop', handleDrop);
+  async function handleDrop(e) {
     e.preventDefault();
-    const file = e.dataTransfer.files[0];
+
+    const dataTransferItems = e.dataTransfer.items;
+    // 使用句柄
+    const fileHandle = await dataTransferItems[0].getAsFileSystemHandle();
+    const file = await fileHandle.getFile();
+
     const readFile = new FileReader();
     readFile.readAsDataURL(file);
     readFile.addEventListener('load', handleLoad);
@@ -75,30 +80,26 @@
         sourceBox.height = naturalHei;
         showImageBox.width = naturalWid;
         showImageBox.height = naturalHei;
-        dragBox.width = naturalWid;
-        dragBox.height = naturalHei;
+        dropBox.width = naturalWid;
+        dropBox.height = naturalHei;
 
         const showImageCtx = showImageBox.getContext('2d');
         showImageCtx.drawImage(this, 0, 0, showImageBox.width, showImageBox.height);
 
-        // 设置蒙层
-        setLayer(dragBox);
       }
     }
 
     let startShot = false;
     let startX, startY, targetX, targetY, targetWid, targetHei;
-    dragBox.addEventListener('mousedown', handleMousedown);
-    dragBox.addEventListener('mousemove', handleMousemove);
-    dragBox.addEventListener('mouseup', handleMouseup);
+    dropBox.addEventListener('mousedown', handleMousedown);
+    dropBox.addEventListener('mousemove', handleMousemove);
+    dropBox.addEventListener('mouseup', handleMouseup);
     function handleMousedown(e) {
       startX = e.offsetX;
       startY = e.offsetY;
-      console.log('down', startShot);
       startShot = true;
     }
     function handleMousemove(e) {
-      console.log(startShot);
       if (!startShot) return;
       const moveX = e.offsetX;
       const moveY = e.offsetY;
@@ -106,30 +107,46 @@
       targetY = Math.min(moveY, startY);
       targetWid = Math.abs(moveX - startX);
       targetHei = Math.abs(moveY - startY);
-      const ctx = dragBox.getContext('2d');
-      ctx.clearRect(0, 0, dragBox.width, dragBox.height);
-      setLayer(dragBox);
+      
+      const ctx = dropBox.getContext('2d');
+      ctx.clearRect(0, 0, dropBox.width, dropBox.height);
+      setLayer(dropBox);
+      drawBorder(dropBox);
+      // 画布和新图形重叠部分透明，画布其他部分正常显示。
+      destinationOut(dropBox);
+    }
+    function handleMouseup(e) {
+      startShot = false;
+      drawShot(dropBox, showClipArea);
+      const ctx = dropBox.getContext('2d');
+      ctx.clearRect(0, 0, dropBox.width, dropBox.height);
+    }
+    // 设置蒙层
+    function setLayer(dropBox) {
+      const ctx = dropBox.getContext('2d');
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+      ctx.fillRect(0, 0, dropBox.width, dropBox.height);
+    }
+
+    //画框
+    function drawBorder(dropBox) {
+      const ctx = dropBox.getContext('2d');
       ctx.strokeStyle = 'red';
       ctx.strokeRect(targetX - ctx.lineWidth, targetY - ctx.lineWidth, targetWid + 2*ctx.lineWidth, targetHei + 2*ctx.lineWidth);
+    }
+
+    // 截图区域透明
+    function destinationOut(dropBox) {
+      const ctx = dropBox.getContext('2d');
       ctx.save();
       ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = 'rgba(0, 0, 0, 1)';
       ctx.fillRect(targetX, targetY, targetWid, targetHei);
       ctx.restore();
     }
-    function handleMouseup(e) {
-      console.log('up', startShot);
-      startShot = false;
-      drawShot(dragBox, showClipArea);
-      const ctx = dragBox.getContext('2d');
-      ctx.clearRect(0, 0, dragBox.width, dragBox.height);
-    }
-    function setLayer(dragBox) {
-      const ctx = dragBox.getContext('2d');
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-      ctx.fillRect(0, 0, dragBox.width, dragBox.height);
-    }
 
-    function drawShot(dragBox, showClipArea) {
+    // 绘制截图区域
+    function drawShot(dropBox, showClipArea) {
       showClipArea.width = targetWid;
       showClipArea.height = targetHei;
       const ctx = showClipArea.getContext('2d');
